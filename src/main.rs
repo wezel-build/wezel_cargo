@@ -223,7 +223,12 @@ impl Forager for Cargo {
     }
 }
 
-forager_sdk::forager_main!(Cargo);
+fn main() {
+    if let Err(error) = forager_sdk::run::<Cargo>() {
+        eprintln!("{}: {error:#}", env!("CARGO_BIN_NAME"));
+        std::process::exit(1);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -245,11 +250,11 @@ mod tests {
 
     #[test]
     fn packages_target_from_array() {
-        let inputs = parse(r#"{"command":"test","build_target":["forager_cargo","wezel_types"]}"#);
+        let inputs = parse(r#"{"command":"test","build_target":["executor_cargo","wezel_types"]}"#);
         assert!(matches!(inputs.command, Command::Test));
         match inputs.build_target {
             PackageSpecifier::Packages(items) => {
-                assert_eq!(items, vec!["forager_cargo", "wezel_types"]);
+                assert_eq!(items, vec!["executor_cargo", "wezel_types"]);
             }
             _ => panic!("expected Packages variant"),
         }
@@ -377,7 +382,10 @@ mod tests {
 
     #[test]
     fn parse_finished_ignores_other_lines() {
-        assert_eq!(parse_finished_ms("   Compiling forager_cargo v0.1.0"), None);
+        assert_eq!(
+            parse_finished_ms("   Compiling executor_cargo v0.1.0"),
+            None
+        );
         assert_eq!(parse_finished_ms("warning: unused variable: `x`"), None);
         assert_eq!(parse_finished_ms(""), None);
     }

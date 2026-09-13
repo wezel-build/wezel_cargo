@@ -1,5 +1,5 @@
 [package]
-name = "forager_cargo"
+name = "executor_cargo"
 version = "0.1.0"
 repository = "https://github.com/wezel-build/forager_cargo"
 publish = false
@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0"
 
 [[bin]]
-name = "forager-cargo"
+name = "executor_cargo"
 path = "src/main.rs"
 
 [package.metadata.dist]
