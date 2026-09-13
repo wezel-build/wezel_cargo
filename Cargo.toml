@@ -1,13 +1,13 @@
 [package]
-name = "executor_cargo"
+name = "wezel_cargo"
 version = "0.1.0"
-repository = "https://github.com/wezel-build/executor_cargo"
+repository = "https://github.com/wezel-build/wezel_cargo"
 publish = false
 edition = "2024"
 license = "Apache-2.0"
 
 [[bin]]
-name = "executor_cargo"
+name = "wezel_cargo"
 path = "src/main.rs"
 
 [package.metadata.dist]
