@@ -45,17 +45,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
-name = "forager_cargo"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "forager_sdk",
- "schemars",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "forager_sdk"
 version = "0.1.0-pre"
 source = "git+https://github.com/wezel-build/wezel?rev=3ea8ccd05932b464e4a6b48662c798a9d16fab3b#3ea8ccd05932b464e4a6b48662c798a9d16fab3b"
@@ -508,6 +497,17 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
+]
+
+[[package]]
+name = "wezel_cargo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "forager_sdk",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
