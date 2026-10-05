@@ -15,7 +15,7 @@ dist = true
 
 [dependencies]
 anyhow = "1"
-forager_sdk = { git = "https://github.com/wezel-build/wezel", rev = "3ea8ccd05932b464e4a6b48662c798a9d16fab3b" }
+forager_sdk = { git = "https://github.com/wezel-build/wezel", rev = "a5859f2458dc72baf5f17622678b69432decba1f" }
 schemars = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
