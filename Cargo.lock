@@ -47,7 +47,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 [[package]]
 name = "forager_sdk"
 version = "0.1.0-pre"
-source = "git+https://github.com/wezel-build/wezel?rev=3ea8ccd05932b464e4a6b48662c798a9d16fab3b#3ea8ccd05932b464e4a6b48662c798a9d16fab3b"
+source = "git+https://github.com/wezel-build/wezel?rev=a5859f2458dc72baf5f17622678b69432decba1f#a5859f2458dc72baf5f17622678b69432decba1f"
 dependencies = [
  "anyhow",
  "schemars",
@@ -513,7 +513,7 @@ dependencies = [
 [[package]]
 name = "wezel_types"
 version = "0.1.0-pre"
-source = "git+https://github.com/wezel-build/wezel?rev=3ea8ccd05932b464e4a6b48662c798a9d16fab3b#3ea8ccd05932b464e4a6b48662c798a9d16fab3b"
+source = "git+https://github.com/wezel-build/wezel?rev=a5859f2458dc72baf5f17622678b69432decba1f#a5859f2458dc72baf5f17622678b69432decba1f"
 dependencies = [
  "indexmap",
  "schemars",

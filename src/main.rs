@@ -1,8 +1,11 @@
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process;
 
 use anyhow::{Context, Result, anyhow};
-use forager_sdk::{Forager, ForagerPluginOutput};
+use forager_sdk::{
+    Forager, ForagerPluginAttachment, ForagerPluginEnvelope, ForagerPluginOutput, attachments_dir,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -132,6 +135,82 @@ fn parse_finished_ms(line: &str) -> Option<u64> {
     }
 }
 
+fn cargo_command(inputs: &CargoInputs) -> process::Command {
+    let mut child = process::Command::new("cargo");
+    child.arg(inputs.command.as_str()).arg("--timings");
+    if let Some(profile) = inputs.profile.as_deref() {
+        child.arg("--profile").arg(profile);
+    }
+    match &inputs.build_target {
+        PackageSpecifier::Packages(items) => {
+            for package in items {
+                child.arg("-p").arg(package);
+            }
+        }
+        PackageSpecifier::Workspace(WorkspaceTag::Workspace) => {
+            child.arg("--workspace");
+        }
+    }
+
+    if inputs.all_targets {
+        child.arg("--all-targets");
+    }
+    if inputs.lib {
+        child.arg("--lib");
+    }
+    if let Some(examples) = &inputs.examples {
+        examples.append(&mut child, "--examples", "--example");
+    }
+    if let Some(benches) = &inputs.benches {
+        benches.append(&mut child, "--benches", "--bench");
+    }
+    if let Some(tests) = &inputs.tests {
+        tests.append(&mut child, "--tests", "--test");
+    }
+    if let Some(bins) = &inputs.bins {
+        bins.append(&mut child, "--bins", "--bin");
+    }
+    child
+}
+
+#[derive(Deserialize)]
+struct CargoMetadata {
+    target_directory: PathBuf,
+}
+
+fn cargo_target_directory() -> Result<PathBuf> {
+    let output = process::Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--no-deps"])
+        .output()
+        .context("failed to run cargo metadata")?;
+    if !output.status.success() {
+        return Err(anyhow!("`cargo metadata` exited with {}", output.status));
+    }
+    let metadata: CargoMetadata =
+        serde_json::from_slice(&output.stdout).context("failed to parse cargo metadata")?;
+    Ok(metadata.target_directory)
+}
+
+fn copy_timing_report(
+    timing_report: &Path,
+    attachment_dir: &Path,
+) -> Result<ForagerPluginAttachment> {
+    const ATTACHMENT_PATH: &str = "cargo-timing.html";
+    std::fs::copy(timing_report, attachment_dir.join(ATTACHMENT_PATH)).with_context(|| {
+        format!(
+            "failed to copy timing report from {}",
+            timing_report.display()
+        )
+    })?;
+    Ok(ForagerPluginAttachment {
+        name: "cargo-timing-report".to_owned(),
+        path: ATTACHMENT_PATH.to_owned(),
+        filename: Some(ATTACHMENT_PATH.to_owned()),
+        content_type: Some("text/html".to_owned()),
+        open_with: None,
+    })
+}
+
 struct Cargo;
 
 impl Forager for Cargo {
@@ -143,40 +222,7 @@ impl Forager for Cargo {
     type Inputs = CargoInputs;
 
     fn run(inputs: CargoInputs) -> Result<Vec<ForagerPluginOutput>> {
-        let mut child = process::Command::new("cargo");
-        child.arg(inputs.command.as_str());
-        if let Some(profile) = inputs.profile.as_deref() {
-            child.arg("--profile").arg(profile);
-        }
-        match inputs.build_target {
-            PackageSpecifier::Packages(items) => {
-                items
-                    .into_iter()
-                    .fold(&mut child, |child, package| child.arg("-p").arg(package));
-            }
-            PackageSpecifier::Workspace(WorkspaceTag::Workspace) => {
-                child.arg("--workspace");
-            }
-        }
-
-        if inputs.all_targets {
-            child.arg("--all-targets");
-        }
-        if inputs.lib {
-            child.arg("--lib");
-        }
-        if let Some(examples) = &inputs.examples {
-            examples.append(&mut child, "--examples", "--example");
-        }
-        if let Some(benches) = &inputs.benches {
-            benches.append(&mut child, "--benches", "--bench");
-        }
-        if let Some(tests) = &inputs.tests {
-            tests.append(&mut child, "--tests", "--test");
-        }
-        if let Some(bins) = &inputs.bins {
-            bins.append(&mut child, "--bins", "--bin");
-        }
+        let mut child = cargo_command(&inputs);
 
         // Capture cargo's stderr so we can read the duration out of its
         // `Finished ... in <t>` status line, which cargo measures itself and
@@ -218,17 +264,24 @@ impl Forager for Cargo {
         Ok(vec![ForagerPluginOutput {
             name: "time_ms".to_owned(),
             value: ms.into(),
-            tags: Default::default(),
+            ..Default::default()
         }])
+    }
+
+    fn run_envelope(inputs: CargoInputs) -> Result<ForagerPluginEnvelope> {
+        let outcomes = Self::run(inputs)?;
+        let timing_report = cargo_target_directory()?
+            .join("cargo-timings")
+            .join("cargo-timing.html");
+        let attachment = copy_timing_report(&timing_report, &attachments_dir()?)?;
+        Ok(ForagerPluginEnvelope {
+            outcomes,
+            attachments: vec![attachment],
+        })
     }
 }
 
-fn main() {
-    if let Err(error) = forager_sdk::run::<Cargo>() {
-        eprintln!("{}: {error:#}", env!("CARGO_BIN_NAME"));
-        std::process::exit(1);
-    }
-}
+forager_sdk::forager_main!(Cargo);
 
 #[cfg(test)]
 mod tests {
@@ -398,5 +451,48 @@ mod tests {
             render_command(&cmd),
             "cargo build --workspace --example foo"
         );
+    }
+
+    #[test]
+    fn cargo_command_enables_timings_and_preserves_options() {
+        let inputs = parse(
+            r#"{"command":"test","build_target":["one","two"],"profile":"release","tests":["smoke"]}"#,
+        );
+        assert_eq!(
+            render_command(&cargo_command(&inputs)),
+            "cargo test --timings --profile release -p one -p two --test smoke"
+        );
+    }
+
+    #[test]
+    fn timing_reports_are_copied_to_each_invocation_directory() {
+        let root =
+            std::env::temp_dir().join(format!("wezel-cargo-timing-test-{}", std::process::id()));
+        let source = root.join("cargo-timing.html");
+        let first_dir = root.join("first");
+        let second_dir = root.join("second");
+        std::fs::create_dir_all(&first_dir).unwrap();
+        std::fs::create_dir_all(&second_dir).unwrap();
+
+        std::fs::write(&source, "<html>first report</html>").unwrap();
+        let attachment = copy_timing_report(&source, &first_dir).unwrap();
+        std::fs::write(&source, "<html>second report</html>").unwrap();
+        copy_timing_report(&source, &second_dir).unwrap();
+
+        assert_eq!(attachment.name, "cargo-timing-report");
+        assert_eq!(attachment.path, "cargo-timing.html");
+        assert_eq!(attachment.filename.as_deref(), Some("cargo-timing.html"));
+        assert_eq!(attachment.content_type.as_deref(), Some("text/html"));
+        assert_eq!(attachment.open_with, None);
+        assert_eq!(
+            std::fs::read_to_string(first_dir.join("cargo-timing.html")).unwrap(),
+            "<html>first report</html>"
+        );
+        assert_eq!(
+            std::fs::read_to_string(second_dir.join("cargo-timing.html")).unwrap(),
+            "<html>second report</html>"
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
